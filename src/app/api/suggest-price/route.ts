@@ -62,23 +62,10 @@ export async function POST(req: NextRequest) {
       ]);
 
     const junkTitleWords = /요금제|할부|약정|통신사|SKT|KT|LGU|유플러스|알뜰폰|사은품|공시지원/i;
-    const coreWords = query.split(/\s+/).filter((w: string) => w.length >= 2);
     const allNewItems = [...naverItems, ...danawaItems]
       .filter((item) => item.price >= 1000)
       .filter((item) => !junkTitleWords.test(item.title))
-      .filter((item) => {
-        if (coreWords.length === 0) return true;
-        const titleLower = item.title.replace(/\s+/g, "").toLowerCase();
-        return coreWords.some((w: string) => titleLower.includes(w.toLowerCase()));
-      })
       .sort((a, b) => a.price - b.price);
-
-    // 가격 이상치 제거
-    if (allNewItems.length >= 3) {
-      const mid = allNewItems[Math.floor(allNewItems.length / 2)].price;
-      const minThreshold = mid * 0.5;
-      allNewItems.splice(0, allNewItems.length, ...allNewItems.filter((item) => item.price >= minThreshold));
-    }
 
     const allUsedListings = [...daangnListings, ...bunjangListings];
 
