@@ -40,12 +40,16 @@ export interface RecentSale {
   source: "당근" | "번개장터";
 }
 
+export type Confidence = "high" | "medium" | "low";
+
 export interface AnalysisResult {
   product: DaangnProduct;
   newPrice: {
     lowest: number;
     average: number;
     items: NaverProduct[];
+    confidence: Confidence;
+    warning?: string;
   };
   marketPrice: {
     average: number;
@@ -55,6 +59,7 @@ export interface AnalysisResult {
     count: number;
     listings: UsedListing[];
     recentSales: RecentSale[];
+    confidence: Confidence;
   };
   verdict: Verdict;
   verdictLabel: string;
@@ -62,4 +67,5 @@ export interface AnalysisResult {
   comparedToMarket: number;
   summary: string;
   negoTip: string;
+  overallConfidence: Confidence;
 }

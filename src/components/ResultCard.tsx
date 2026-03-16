@@ -21,6 +21,20 @@ function SourceBadge({ source }: { source: string }) {
   );
 }
 
+function ConfidenceBadge({ confidence }: { confidence: string }) {
+  if (confidence === "high") return null;
+  const styles =
+    confidence === "low"
+      ? "bg-red-50 text-red-600"
+      : "bg-yellow-50 text-yellow-700";
+  const label = confidence === "low" ? "데이터 부족" : "참고용";
+  return (
+    <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-medium ml-1.5 ${styles}`}>
+      {label}
+    </span>
+  );
+}
+
 function VerdictBadge({ result }: { result: AnalysisResult }) {
   const bgColors: Record<string, string> = {
     great: "bg-green/10 border-green",
@@ -29,12 +43,19 @@ function VerdictBadge({ result }: { result: AnalysisResult }) {
     expensive: "bg-red-50 border-red",
   };
 
+  const isLowConf = result.overallConfidence === "low";
+
   return (
     <div
-      className={`text-center p-5 rounded-2xl border ${bgColors[result.verdict]}`}
+      className={`text-center p-5 rounded-2xl border ${isLowConf ? "bg-gray-50 border-gray-200" : bgColors[result.verdict]}`}
     >
       <div className="text-3xl mb-1">{result.verdictLabel}</div>
       <p className="text-sm text-gray-600 mt-2">{result.summary}</p>
+      {isLowConf && (
+        <p className="text-xs text-gray-400 mt-2">
+          더 정확한 분석을 위해 정확한 모델명이 포함된 매물을 검색해보세요
+        </p>
+      )}
     </div>
   );
 }
@@ -73,8 +94,12 @@ export default function ResultCard({ result }: { result: AnalysisResult }) {
       <div className="bg-white rounded-2xl p-5 shadow-sm">
         <h3 className="font-semibold text-sm mb-3">가격 비교</h3>
         <div className="grid grid-cols-2 gap-3">
+          {/* 중고 시세 */}
           <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-xs text-gray-400 mb-1">중고 시세 (중위값)</p>
+            <p className="text-xs text-gray-400 mb-1">
+              중고 시세
+              <ConfidenceBadge confidence={result.marketPrice.confidence} />
+            </p>
             {result.marketPrice.median > 0 ? (
               <>
                 <p className="font-bold text-sm">
@@ -95,18 +120,27 @@ export default function ResultCard({ result }: { result: AnalysisResult }) {
               </>
             ) : (
               <p className="text-xs text-gray-400 mt-1">
-                중고 시세 파악 어려움
+                시세를 파악하기 어려워요
               </p>
             )}
           </div>
+
+          {/* 새제품 */}
           <div className="bg-gray-50 rounded-xl p-3">
-            <p className="text-xs text-gray-400 mb-1">새제품 최저가</p>
+            <p className="text-xs text-gray-400 mb-1">
+              새제품 최저가
+              <ConfidenceBadge confidence={result.newPrice.confidence} />
+            </p>
             {result.newPrice.lowest > 0 ? (
               <>
                 <p className="font-bold text-sm">
                   {formatPrice(result.newPrice.lowest)}
                 </p>
-                {result.discountFromNew > 0 ? (
+                {result.newPrice.warning ? (
+                  <p className="text-xs text-yellow-600 mt-0.5">
+                    {result.newPrice.warning}
+                  </p>
+                ) : result.discountFromNew > 0 ? (
                   <p className="text-xs text-green mt-0.5">
                     {result.discountFromNew}% 할인
                   </p>
@@ -125,7 +159,7 @@ export default function ResultCard({ result }: { result: AnalysisResult }) {
         </div>
 
         {/* 시세 범위 바 */}
-        {result.marketPrice.min > 0 && (
+        {result.marketPrice.min > 0 && result.marketPrice.confidence !== "low" && (
           <div className="mt-4">
             <div className="flex justify-between text-xs text-gray-400 mb-1">
               <span>{formatPrice(result.marketPrice.min)}</span>
@@ -235,10 +269,18 @@ export default function ResultCard({ result }: { result: AnalysisResult }) {
         </div>
       )}
 
-      {/* 새제품 참고 */}
+      {/* 새제품 참고 — 신뢰도 low면 경고와 함께 표시 */}
       {result.newPrice.items.length > 0 && (
         <div className="bg-white rounded-2xl p-5 shadow-sm">
-          <h3 className="font-semibold text-sm mb-3">새제품 참고가</h3>
+          <h3 className="font-semibold text-sm mb-2">
+            새제품 참고가
+            <ConfidenceBadge confidence={result.newPrice.confidence} />
+          </h3>
+          {result.newPrice.confidence === "low" && (
+            <p className="text-xs text-yellow-600 mb-3 bg-yellow-50 rounded-lg p-2">
+              검색된 새제품이 이 매물과 다른 제품일 수 있어요. 참고만 해주세요.
+            </p>
+          )}
           <div className="space-y-2">
             {result.newPrice.items.slice(0, 3).map((item, i) => (
               <a
@@ -260,6 +302,11 @@ export default function ResultCard({ result }: { result: AnalysisResult }) {
           </div>
         </div>
       )}
+
+      {/* 데이터 출처 */}
+      <p className="text-[10px] text-gray-300 text-center pb-2">
+        네이버쇼핑 · 다나와 · 당근마켓 · 번개장터 데이터 기반
+      </p>
     </div>
   );
 }

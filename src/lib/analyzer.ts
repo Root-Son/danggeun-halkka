@@ -4,6 +4,7 @@ import {
   UsedListing,
   AnalysisResult,
   Verdict,
+  Confidence,
 } from "./types";
 
 function median(numbers: number[]): number {
@@ -12,6 +13,37 @@ function median(numbers: number[]): number {
   return sorted.length % 2 !== 0
     ? sorted[mid]
     : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+}
+
+function assessMarketConfidence(
+  usedListings: UsedListing[],
+  soldCount: number
+): Confidence {
+  if (soldCount >= 5) return "high";
+  if (soldCount >= 2 || usedListings.length >= 5) return "medium";
+  return "low";
+}
+
+function assessNewPriceConfidence(
+  naverItems: NaverProduct[],
+  productPrice: number
+): { confidence: Confidence; warning?: string } {
+  if (naverItems.length === 0) {
+    return { confidence: "low" };
+  }
+
+  const lowest = Math.min(...naverItems.map((i) => i.price));
+
+  // 새제품이 중고가보다 싸면 → 다른 제품일 가능성 높음
+  if (productPrice > 0 && lowest < productPrice * 0.5) {
+    return {
+      confidence: "low",
+      warning: "새제품 가격이 이 매물보다 낮아요. 다른 제품이 검색됐을 수 있어요.",
+    };
+  }
+
+  if (naverItems.length >= 3) return { confidence: "high" };
+  return { confidence: "medium" };
 }
 
 export function analyze(
@@ -52,8 +84,13 @@ export function analyze(
   const marketMin = marketPrices.length > 0 ? Math.min(...marketPrices) : 0;
   const marketMax = marketPrices.length > 0 ? Math.max(...marketPrices) : 0;
 
-  // 새제품 대비 할인율
-  const referenceNewPrice = newPriceLowest || newPriceAverage;
+  // 신뢰도 평가
+  const marketConf = assessMarketConfidence(usedListings, soldListings.length);
+  const newPriceConf = assessNewPriceConfidence(naverItems, product.price);
+
+  // 새제품 대비 할인율 (신뢰도 낮으면 계산하지 않음)
+  const referenceNewPrice =
+    newPriceConf.confidence !== "low" ? (newPriceLowest || newPriceAverage) : 0;
   const discountFromNew =
     referenceNewPrice > 0
       ? Math.round(((referenceNewPrice - product.price) / referenceNewPrice) * 100)
@@ -70,8 +107,11 @@ export function analyze(
   let verdict: Verdict;
   let verdictLabel: string;
 
-  if (referenceMarketPrice > 0) {
-    // 중고 시세가 있으면 시세 기반 판정 우선
+  // 데이터 부족 시 솔직하게
+  if (marketConf === "low" && newPriceConf.confidence === "low") {
+    verdict = "fair";
+    verdictLabel = "⚪ 정보가 부족해요";
+  } else if (referenceMarketPrice > 0) {
     if (comparedToMarket <= -15) {
       verdict = "great";
       verdictLabel = "🟢 개이득!";
@@ -86,7 +126,6 @@ export function analyze(
       verdictLabel = "🔴 좀 비싸요";
     }
   } else if (referenceNewPrice > 0) {
-    // 중고 시세 없으면 새제품 대비로 판정
     if (discountFromNew >= 50) {
       verdict = "great";
       verdictLabel = "🟢 개이득!";
@@ -102,13 +141,12 @@ export function analyze(
     }
   } else {
     verdict = "fair";
-    verdictLabel = "🟡 판단 어려움";
+    verdictLabel = "⚪ 정보가 부족해요";
   }
 
   // 요약 생성
   let summary = "";
 
-  // 중고 시세 먼저 (핵심)
   if (referenceMarketPrice > 0) {
     const sourceCount = {
       당근: usedListings.filter((l) => l.source === "당근").length,
@@ -126,13 +164,18 @@ export function analyze(
     } else {
       summary += `중고 시세와 비슷한 가격이에요. `;
     }
-    summary += `(${sources} 기반)`;
+
+    if (marketConf === "medium") {
+      summary += `(${sources} 기반 — 데이터가 적어 참고용)`;
+    } else {
+      summary += `(${sources} 기반)`;
+    }
   } else {
-    summary += `중고 거래 내역을 충분히 찾지 못해 시세 비교가 어렵습니다. `;
+    summary += `중고 거래 데이터가 부족해서 시세 비교가 어려워요.`;
   }
 
-  // 새제품 대비 (보조)
-  if (referenceNewPrice > 0) {
+  // 새제품 대비 (신뢰도 높을 때만)
+  if (referenceNewPrice > 0 && newPriceConf.confidence !== "low") {
     if (discountFromNew > 0) {
       summary += ` 새제품(${referenceNewPrice.toLocaleString()}원) 대비 ${discountFromNew}% 할인.`;
     } else if (discountFromNew < 0) {
@@ -140,9 +183,16 @@ export function analyze(
     }
   }
 
+  // 정보 부족 시 안내
+  if (verdictLabel.includes("정보가 부족")) {
+    summary = `이 제품의 정확한 시세를 파악하기 어려워요. 제품명을 더 구체적으로 검색해보거나, 판매자에게 정확한 모델명을 확인해보세요.`;
+  }
+
   // 네고 팁
   let negoTip = "";
-  if (verdict === "expensive" && referenceMarketPrice > 0) {
+  if (verdictLabel.includes("정보가 부족")) {
+    negoTip = "";
+  } else if (verdict === "expensive" && referenceMarketPrice > 0) {
     const suggestedPrice = Math.round(referenceMarketPrice * 0.95);
     negoTip = `${suggestedPrice.toLocaleString()}원 정도로 네고해보세요. 시세보다 살짝 아래가 적정선이에요.`;
   } else if (verdict === "fair" && referenceMarketPrice > 0) {
@@ -154,12 +204,22 @@ export function analyze(
     negoTip = "이 가격이면 네고 없이 바로 가도 좋아요!";
   }
 
+  // 전체 신뢰도
+  let overallConfidence: Confidence = "high";
+  if (marketConf === "low" && newPriceConf.confidence === "low") {
+    overallConfidence = "low";
+  } else if (marketConf === "low" || newPriceConf.confidence === "low") {
+    overallConfidence = "medium";
+  }
+
   return {
     product,
     newPrice: {
       lowest: newPriceLowest,
       average: newPriceAverage,
       items: naverItems.slice(0, 5),
+      confidence: newPriceConf.confidence,
+      warning: newPriceConf.warning,
     },
     marketPrice: {
       average: marketAvg,
@@ -169,6 +229,7 @@ export function analyze(
       count: marketPrices.length,
       listings: marketListings.slice(0, 10),
       recentSales,
+      confidence: marketConf,
     },
     verdict,
     verdictLabel,
@@ -176,6 +237,7 @@ export function analyze(
     comparedToMarket,
     summary,
     negoTip,
+    overallConfidence,
   };
 }
 
@@ -207,12 +269,10 @@ export function suggestSellingPrice(
 
   const rate = conditionRate[condition];
 
-  // 중고 실거래가가 있으면 그걸 기준으로, 없으면 새제품 기준
   let basePrice: number;
   let basedOn: string;
 
   if (marketMedian > 0 && newPriceLowest > 0) {
-    // 둘 다 있으면 중고 시세에 가중치를 더 줌
     basePrice = Math.round(marketMedian * 0.6 + newPriceLowest * rate * 0.4);
     basedOn = `중고 실거래가(${marketMedian.toLocaleString()}원)와 새제품 최저가(${newPriceLowest.toLocaleString()}원)를 종합`;
   } else if (marketMedian > 0) {
@@ -225,7 +285,7 @@ export function suggestSellingPrice(
     return {
       suggested: 0,
       range: { min: 0, max: 0 },
-      reasoning: "시세 정보가 부족해서 추천이 어렵습니다.",
+      reasoning: "시세 정보가 부족해서 추천이 어렵습니다. 제품명을 더 구체적으로 입력해보세요.",
     };
   }
 
