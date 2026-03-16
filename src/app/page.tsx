@@ -148,7 +148,7 @@ export default function Home() {
               </summary>
               <div className="mt-2 bg-white rounded-xl p-4 space-y-2 text-gray-500">
                 <p><span className="font-semibold text-gray-600">1.</span> 당근 앱에서 매물 열기</p>
-                <p><span className="font-semibold text-gray-600">2.</span> 오른쪽 상단 <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">공유 ↗</span> 버튼 누르기</p>
+                <p><span className="font-semibold text-gray-600">2.</span> 오른쪽 상단 <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">⋮</span> 메뉴 → <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">공유</span> 누르기</p>
                 <p><span className="font-semibold text-gray-600">3.</span> <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">링크 복사</span> 또는 <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">클립보드에 복사</span> 선택</p>
                 <p><span className="font-semibold text-gray-600">4.</span> 위 입력창에 붙여넣기 하면 끝!</p>
                 <p className="text-gray-400 pt-1">💡 공유 시 같이 복사되는 텍스트가 있어도 자동으로 링크만 추출해요</p>
