@@ -38,15 +38,66 @@ async function searchNaver(query: string): Promise<NaverProduct[]> {
   );
 }
 
-// 제목에서 거래 노이즈만 최소한으로 제거. 제품명은 그대로 유지.
-function cleanTitle(title: string): string {
-  return title
-    .replace(/[([{【〔][^\])}】〕]*[)\]}】〕]/g, "") // 괄호 안 부가정보
-    .replace(/택배비?포함|직거래|네고\s*가능?|급처|무료배송|택포|팝니다|판매합니다|판매|떨이|급매/g, "")
-    .replace(/\d+만\s*원?/g, "") // "5만원"
-    .replace(/\d{4,}\s*원/g, "")  // "50000원"
-    .replace(/\s+/g, " ")
-    .trim();
+/** Gemini로 당근 글의 제목+본문을 읽고 정확한 제품 정보 추출 */
+async function extractProductInfo(
+  title: string,
+  description: string
+): Promise<{ newProductKeyword: string; usedSearchKeyword: string; condition: string }> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { newProductKeyword: title, usedSearchKeyword: title, condition: "" };
+  }
+
+  const prompt = `당근마켓 중고거래 글을 분석해서 아래 JSON을 채워줘.
+
+[글 정보]
+제목: ${title}
+본문: ${description.slice(0, 500)}
+
+[규칙]
+1. newProductKeyword: 이 **정확한 제품**의 새제품을 쇼핑몰에서 찾을 수 있는 공식 제품명. 제목의 약어나 줄임말을 정식 명칭으로 바꿔야 함.
+   - "에어팟프로2 충전케이스 8핀" → "Apple 에어팟 프로 2세대 MagSafe 충전케이스 라이트닝"
+   - "갤럭시 S24 울트라 256" → "삼성 갤럭시 S24 울트라 256GB"
+   - "아이패드프로 4세대 11인치" → "Apple 아이패드 프로 4세대 11인치"
+   - "다이슨 v15" → "다이슨 V15 디텍트"
+2. usedSearchKeyword: 중고마켓에서 같은 제품을 찾을 키워드. 사람들이 실제로 검색하는 자연스러운 표현.
+3. condition: 본문에서 파악한 상태. "사용감 있다", "기스", "찍힘", "오염" → 사용감있음. "거의 안 씀", "미개봉급" → 거의새것. "새제품", "미개봉" → 새상품. "많이 사용", "고장", "파손" → 많이사용. 판단 불가면 빈 문자열.
+
+JSON만 출력:
+{"newProductKeyword":"...","usedSearchKeyword":"...","condition":"..."}`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 8192, temperature: 0.1 },
+        }),
+      }
+    );
+
+    if (!res.ok) {
+      return { newProductKeyword: title, usedSearchKeyword: title, condition: "" };
+    }
+
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { newProductKeyword: title, usedSearchKeyword: title, condition: "" };
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      newProductKeyword: parsed.newProductKeyword || title,
+      usedSearchKeyword: parsed.usedSearchKeyword || title,
+      condition: parsed.condition || "",
+    };
+  } catch (e) {
+    console.error("Gemini extract error:", e);
+    return { newProductKeyword: title, usedSearchKeyword: title, condition: "" };
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -70,16 +121,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. 검색 키워드 = 제목에서 거래 노이즈만 제거 (제품명은 그대로)
-    const searchQuery = cleanTitle(product.title);
+    // 2. Gemini로 본문 분석 → 새제품/중고 각각 최적 키워드 + 상태 추출
+    const productInfo = await extractProductInfo(
+      product.title,
+      product.description
+    );
 
-    // 3. 모든 소스 동시 조회 — 새제품/중고 모두 같은 키워드
+    // 3. 새제품은 정식 제품명으로, 중고는 자연스러운 키워드로 검색
     const [naverItems, danawaItems, daangnListings, bunjangListings] =
       await Promise.all([
-        searchNaver(searchQuery),
-        searchDanawa(searchQuery),
-        searchDaangn(searchQuery),
-        searchBunjang(searchQuery),
+        searchNaver(productInfo.newProductKeyword),
+        searchDanawa(productInfo.newProductKeyword),
+        searchDaangn(productInfo.usedSearchKeyword),
+        searchBunjang(productInfo.usedSearchKeyword),
       ]);
 
     // 4. 새제품 가격 합치기 (요금제/통신사 번들만 제거 + 중복 제거)
@@ -104,10 +158,16 @@ export async function POST(req: NextRequest) {
       (l) => normalizeUrl(l.url) !== myUrl
     );
 
-    // 6. 분석
+    // 6. 분석 (Gemini가 파악한 상태 정보도 전달)
     const result = analyze(product, deduped, allUsedListings);
 
-    return NextResponse.json(result);
+    // Gemini 분석 결과 추가
+    return NextResponse.json({
+      ...result,
+      searchKeyword: productInfo.usedSearchKeyword,
+      newProductKeyword: productInfo.newProductKeyword,
+      detectedCondition: productInfo.condition,
+    });
   } catch (error) {
     console.error("Analysis error:", error);
     return NextResponse.json(
