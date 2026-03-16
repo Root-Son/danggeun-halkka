@@ -124,11 +124,13 @@ export async function POST(req: NextRequest) {
 
     // 4. 새제품 가격 합치기 (이상치 제거 + 중복 제거)
     const junkTitleWords = /요금제|할부|약정|통신사|SKT|KT|LGU|유플러스|알뜰폰|사은품|공시지원/i;
+    const accessoryWords = /케이스|커버|필름|스킨|스티커|이어팁|거치대|파우치|스트랩|키링|실리콘|하드케이스|젤리|범퍼|클리어|투명|보호|데코|참|홀더|크레들|독|마운트/i;
     // 핵심 키워드(브랜드/모델)가 제목에 포함된 것만
     const coreWords = newProductQuery.split(/\s+/).filter((w) => w.length >= 2);
     const allNewItems = [...naverItems, ...danawaItems]
       .filter((item) => item.price >= 1000) // 1,000원 미만 제거
       .filter((item) => !junkTitleWords.test(item.title)) // 요금제/통신사 상품 제거
+      .filter((item) => !accessoryWords.test(item.title)) // 액세서리 제거
       .filter((item) => {
         // 핵심 키워드 중 하나 이상 제목에 포함되어야 함
         if (coreWords.length === 0) return true;
@@ -156,8 +158,12 @@ export async function POST(req: NextRequest) {
       return true;
     });
 
-    // 5. 중고 매물 합치기 (당근 + 번개장터)
-    const allUsedListings = [...daangnListings, ...bunjangListings];
+    // 5. 중고 매물 합치기 (당근 + 번개장터) — 본인 글 제외
+    const normalizeUrl = (u: string) => u.replace(/\/+$/, "").toLowerCase();
+    const myUrl = normalizeUrl(url);
+    const allUsedListings = [...daangnListings, ...bunjangListings].filter(
+      (l) => normalizeUrl(l.url) !== myUrl
+    );
 
     // 6. 분석
     const result = analyze(product, deduped, allUsedListings);
