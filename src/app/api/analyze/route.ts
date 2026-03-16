@@ -102,7 +102,10 @@ JSON만 출력:
 
 export async function POST(req: NextRequest) {
   try {
-    const { url } = await req.json();
+    const body = await req.json();
+    // 공유 텍스트에서 당근 URL 추출 ("이 글을 당근해보세요!\nhttps://..." 등)
+    const urlMatch = (body.url || "").match(/https?:\/\/(?:www\.)?daangn\.com\/[^\s"'<>]+/i);
+    const url = urlMatch ? urlMatch[0] : (body.url || "").trim();
 
     if (!url || !url.includes("daangn.com")) {
       return NextResponse.json(

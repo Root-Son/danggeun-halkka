@@ -12,8 +12,16 @@ export default function Home() {
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"buyer" | "seller">("buyer");
 
+  // 붙여넣기한 텍스트에서 당근마켓 URL만 추출
+  const extractDaangnUrl = (text: string): string => {
+    const match = text.match(/https?:\/\/(?:www\.)?daangn\.com\/[^\s"'<>]+/i);
+    return match ? match[0] : text.trim();
+  };
+
   const handleAnalyze = async () => {
     if (!url.trim()) return;
+
+    const cleanUrl = extractDaangnUrl(url);
 
     setLoading(true);
     setError("");
@@ -23,7 +31,7 @@ export default function Home() {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: url.trim() }),
+        body: JSON.stringify({ url: cleanUrl }),
       });
 
       const data = await res.json();
@@ -86,16 +94,16 @@ export default function Home() {
             {/* 구매자 모드: 링크 입력 */}
             <div className="bg-white rounded-2xl p-5 shadow-sm">
               <p className="text-sm text-gray-500 mb-3">
-                당근마켓 링크를 붙여넣으면<br />
+                당근마켓에서 공유한 링크를 붙여넣으면<br />
                 이 매물이 살만한지 판별해드려요
               </p>
               <div className="flex gap-2">
                 <input
-                  type="url"
+                  type="text"
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
-                  placeholder="https://www.daangn.com/kr/buy-sell/..."
+                  placeholder="당근 링크 또는 공유 텍스트 붙여넣기"
                   className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-orange focus:ring-1 focus:ring-orange"
                 />
                 <button
