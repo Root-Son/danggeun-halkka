@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  scrapeDaangnProduct,
+  scrapeProduct,
   searchDaangn,
   searchBunjang,
   searchDanawa,
@@ -111,19 +111,19 @@ JSON만 출력:
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    // 공유 텍스트에서 당근 URL 추출 ("이 글을 당근해보세요!\nhttps://..." 등)
-    const urlMatch = (body.url || "").match(/https?:\/\/(?:www\.)?daangn\.com\/[^\s"'<>]+/i);
+    // 공유 텍스트에서 URL 추출 ("이 글을 당근해보세요!\nhttps://..." 등)
+    const urlMatch = (body.url || "").match(/https?:\/\/[^\s"'<>]+/i);
     const url = urlMatch ? urlMatch[0] : (body.url || "").trim();
 
-    if (!url || !url.includes("daangn.com")) {
+    if (!url || !url.startsWith("http")) {
       return NextResponse.json(
-        { error: "올바른 당근마켓 링크를 입력해주세요." },
+        { error: "올바른 중고거래 링크를 입력해주세요." },
         { status: 400 }
       );
     }
 
-    // 1. 당근 상품 페이지 크롤링
-    const product = await scrapeDaangnProduct(url);
+    // 1. 상품 페이지 크롤링 (당근, 번개장터, 중고나라 등 어디든)
+    const product = await scrapeProduct(url);
 
     if (!product.title) {
       return NextResponse.json(

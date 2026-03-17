@@ -12,16 +12,16 @@ export default function Home() {
   const [error, setError] = useState("");
   const [mode, setMode] = useState<"buyer" | "seller">("buyer");
 
-  // 붙여넣기한 텍스트에서 당근마켓 URL만 추출
-  const extractDaangnUrl = (text: string): string => {
-    const match = text.match(/https?:\/\/(?:www\.)?daangn\.com\/[^\s"'<>]+/i);
+  // 붙여넣기한 텍스트에서 URL 추출
+  const extractUrl = (text: string): string => {
+    const match = text.match(/https?:\/\/[^\s"'<>]+/i);
     return match ? match[0] : text.trim();
   };
 
   const handleAnalyze = async () => {
     if (!url.trim()) return;
 
-    const cleanUrl = extractDaangnUrl(url);
+    const cleanUrl = extractUrl(url);
 
     setLoading(true);
     setError("");
@@ -94,7 +94,7 @@ export default function Home() {
             {/* 구매자 모드: 링크 입력 */}
             <div className="bg-white rounded-2xl p-5 shadow-sm">
               <p className="text-sm text-gray-500 mb-3">
-                당근마켓에서 공유한 링크를 붙여넣으면<br />
+                중고거래 링크를 붙여넣으면<br />
                 이 매물이 살만한지 판별해드려요
               </p>
               <div className="flex gap-2">
@@ -103,7 +103,7 @@ export default function Home() {
                   value={url}
                   onChange={(e) => setUrl(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAnalyze()}
-                  placeholder="당근 링크 또는 공유 텍스트 붙여넣기"
+                  placeholder="당근, 번개장터, 중고나라 등 링크 붙여넣기"
                   className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-orange focus:ring-1 focus:ring-orange"
                 />
                 <button
@@ -147,9 +147,9 @@ export default function Home() {
                 링크는 어떻게 복사하나요?
               </summary>
               <div className="mt-2 bg-white rounded-xl p-4 space-y-2 text-gray-500">
-                <p><span className="font-semibold text-gray-600">1.</span> 당근 앱에서 매물 열기</p>
-                <p><span className="font-semibold text-gray-600">2.</span> 오른쪽 상단 <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">⋮</span> 메뉴 → <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">공유</span> 누르기</p>
-                <p><span className="font-semibold text-gray-600">3.</span> <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">링크 복사</span> 또는 <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">클립보드에 복사</span> 선택</p>
+                <p><span className="font-semibold text-gray-600">1.</span> 당근/번개장터/중고나라 등에서 매물 열기</p>
+                <p><span className="font-semibold text-gray-600">2.</span> <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">⋮</span> 메뉴 또는 <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">공유</span> 버튼 누르기</p>
+                <p><span className="font-semibold text-gray-600">3.</span> <span className="inline-flex items-center px-1.5 py-0.5 bg-gray-100 rounded text-[11px]">링크 복사</span> 선택</p>
                 <p><span className="font-semibold text-gray-600">4.</span> 위 입력창에 붙여넣기 하면 끝!</p>
                 <p className="text-gray-400 pt-1">💡 공유 시 같이 복사되는 텍스트가 있어도 자동으로 링크만 추출해요</p>
               </div>
@@ -169,7 +169,7 @@ export default function Home() {
             {!result && !loading && !error && (
               <div className="mt-8 text-center text-gray-400 text-sm">
                 <div className="text-4xl mb-3">🥕</div>
-                <p>당근마켓에서 마음에 드는 매물을 발견하면</p>
+                <p>중고거래 앱에서 마음에 드는 매물을 발견하면</p>
                 <p>링크를 여기에 붙여넣어보세요!</p>
               </div>
             )}

@@ -1,17 +1,25 @@
 import { DaangnProduct, UsedListing, NaverProduct } from "./types";
 
-export async function scrapeDaangnProduct(
+/** 어떤 중고거래 플랫폼이든 상품 정보를 추출 (JSON-LD + OG 메타태그 + HTML) */
+export async function scrapeProduct(
   url: string
 ): Promise<DaangnProduct> {
+  // 번개장터는 SPA라서 서버사이드 크롤링 불가
+  if (url.includes("bunjang.co.kr")) {
+    throw new Error("번개장터는 링크 분석이 어려워요. 제품명을 판매자 모드에서 직접 입력해주세요!");
+  }
+
+  // HTML에서 JSON-LD + OG 메타태그로 추출
   const res = await fetch(url, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     },
+    redirect: "follow",
   });
 
   if (!res.ok) {
-    throw new Error(`당근마켓 페이지를 불러올 수 없습니다 (${res.status})`);
+    throw new Error(`페이지를 불러올 수 없습니다 (${res.status})`);
   }
 
   const html = await res.text();
