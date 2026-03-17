@@ -89,7 +89,8 @@ export async function scrapeDaangnProduct(
 // ─── 당근마켓 검색 ───
 
 export async function searchDaangn(query: string): Promise<UsedListing[]> {
-  const url = `https://www.daangn.com/kr/buy-sell/s/?search=${encodeURIComponent(query)}`;
+  // Remix _data 엔드포인트로 JSON 직접 요청 (HTML 파싱 불필요, ~100개 반환)
+  const url = `https://www.daangn.com/kr/buy-sell/s/?search=${encodeURIComponent(query)}&_data=routes/kr.buy-sell.s`;
 
   const res = await fetch(url, {
     headers: {
@@ -100,16 +101,9 @@ export async function searchDaangn(query: string): Promise<UsedListing[]> {
 
   if (!res.ok) return [];
 
-  const html = await res.text();
-
-  // Remix JSON state에서 상품 데이터 추출
-  const remixMatch = html.match(/window\.__remixContext\s*=\s*(\{[\s\S]*?\});?\s*<\/script>/);
-  if (!remixMatch) return [];
-
   try {
-    const remixData = JSON.parse(remixMatch[1]);
-    const articles =
-      remixData?.state?.loaderData?.["routes/kr.buy-sell.s"]?.allPage?.fleamarketArticles || [];
+    const data = await res.json();
+    const articles = data?.allPage?.fleamarketArticles || [];
 
     return articles
       .filter((a: { title: string; price: string }) => a.title && parseFloat(a.price) > 0)
