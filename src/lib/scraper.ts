@@ -96,22 +96,40 @@ export async function scrapeProduct(
 
 // ─── 당근마켓 검색 ───
 
-export async function searchDaangn(query: string): Promise<UsedListing[]> {
-  // Remix _data 엔드포인트로 JSON 직접 요청 (HTML 파싱 불필요, ~100개 반환)
+async function fetchDaangnSearch(query: string): Promise<{ title: string; price: string; status: string; href: string; regionId?: { name?: string } }[]> {
   const url = `https://www.daangn.com/kr/buy-sell/s/?search=${encodeURIComponent(query)}&_data=routes/kr.buy-sell.s`;
-
   const res = await fetch(url, {
     headers: {
       "User-Agent":
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     },
   });
-
   if (!res.ok) return [];
-
   try {
     const data = await res.json();
-    const articles = data?.allPage?.fleamarketArticles || [];
+    return data?.allPage?.fleamarketArticles || [];
+  } catch {
+    return [];
+  }
+}
+
+export async function searchDaangn(query: string): Promise<UsedListing[]> {
+  // 결과 없으면 키워드를 줄여가며 재시도
+  let articles = await fetchDaangnSearch(query);
+
+  if (articles.length === 0) {
+    const tokens = query.split(/\s+/);
+    // 토큰이 3개 이상이면 앞 2개로 재시도
+    if (tokens.length >= 3) {
+      articles = await fetchDaangnSearch(tokens.slice(0, 2).join(" "));
+    }
+    // 그래도 없으면 첫 단어만
+    if (articles.length === 0 && tokens.length >= 2) {
+      articles = await fetchDaangnSearch(tokens[0]);
+    }
+  }
+
+  try {
 
     return articles
       .filter((a: { title: string; price: string }) => a.title && parseFloat(a.price) > 0)
