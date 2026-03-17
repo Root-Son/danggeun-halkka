@@ -10,7 +10,7 @@ async function searchNaver(query: string): Promise<NaverProduct[]> {
   if (!clientId || !clientSecret) return [];
 
   const res = await fetch(
-    `https://openapi.naver.com/v1/search/shop.json?query=${encodeURIComponent(query)}&display=20&sort=sim`,
+    `https://openapi.naver.com/v1/search/shop.json?query=${encodeURIComponent(query)}&display=40&sort=sim`,
     {
       headers: {
         "X-Naver-Client-Id": clientId,
@@ -22,15 +22,23 @@ async function searchNaver(query: string): Promise<NaverProduct[]> {
   if (!res.ok) return [];
 
   const data = await res.json();
-  return (data.items || []).map(
-    (item: { title: string; lprice: string; link: string; mallName: string; image: string }) => ({
+  const allItems = (data.items || []).map(
+    (item: { title: string; lprice: string; link: string; mallName: string; image: string; productType: string }) => ({
       title: item.title.replace(/<[^>]*>/g, ""),
       price: parseInt(item.lprice) || 0,
       link: item.link,
       mall: item.mallName,
       image: item.image,
+      _productType: item.productType,
     })
   );
+
+  const priceCompare = allItems.filter((i: { _productType: string }) => i._productType === "1");
+  const normalSeller = allItems.filter((i: { _productType: string }) => i._productType === "2");
+
+  const selected = priceCompare.length > 0 ? priceCompare : normalSeller.length > 0 ? normalSeller : allItems;
+
+  return selected.map(({ _productType, ...rest }: { _productType: string; title: string; price: number; link: string; mall: string; image: string }) => rest);
 }
 
 export async function POST(req: NextRequest) {
