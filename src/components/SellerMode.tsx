@@ -8,6 +8,10 @@ interface SellerResult {
   suggested: number;
   range: { min: number; max: number };
   reasoning: string;
+  listing: {
+    title: string;
+    description: string;
+  };
 }
 
 const QUICK_EXAMPLES = [
@@ -28,11 +32,7 @@ export default function SellerMode() {
   const [identifying, setIdentifying] = useState(false);
   const [result, setResult] = useState<SellerResult | null>(null);
   const [error, setError] = useState("");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [identifiedInfo, setIdentifiedInfo] = useState<{
-    productName: string;
-    category: string;
-  } | null>(null);
+  const [copied, setCopied] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const conditions: { value: Condition; label: string; emoji: string }[] = [
@@ -48,6 +48,7 @@ export default function SellerMode() {
     setLoading(true);
     setError("");
     setResult(null);
+    setCopied(false);
 
     try {
       const res = await fetch("/api/suggest-price", {
@@ -75,12 +76,8 @@ export default function SellerMode() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 미리보기
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
     setIdentifying(true);
     setError("");
-    setIdentifiedInfo(null);
 
     try {
       const formData = new FormData();
@@ -99,138 +96,36 @@ export default function SellerMode() {
       }
 
       setQuery(data.searchKeyword || data.productName);
-      setIdentifiedInfo({
-        productName: data.productName,
-        category: data.category,
-      });
     } catch {
       setError("제품 인식 중 오류가 발생했습니다.");
     } finally {
       setIdentifying(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
-  const clearImage = () => {
-    setPreviewUrl(null);
-    setIdentifiedInfo(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
+  const handleCopyListing = async () => {
+    if (!result?.listing) return;
+    const text = `${result.listing.title}\n\n${result.listing.description}`;
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
     <div>
       <div className="bg-white rounded-2xl p-5 shadow-sm">
         <p className="text-sm text-gray-500 mb-3">
-          제품 사진을 찍거나 제품명을 입력하면
-          <br />
-          적정 판매가를 알려드려요
+          제품명과 상태를 입력하면<br />
+          <strong className="text-gray-700">적정가 + 판매글</strong>을 한번에 만들어드려요
         </p>
-
-        {/* 사진 업로드 영역 */}
-        <div className="mb-3">
-          {previewUrl ? (
-            <div className="relative">
-              <img
-                src={previewUrl}
-                alt="업로드된 제품 사진"
-                className="w-full h-40 object-cover rounded-xl"
-              />
-              {identifying && (
-                <div className="absolute inset-0 bg-black/50 rounded-xl flex items-center justify-center">
-                  <div className="text-white text-sm flex items-center gap-2">
-                    <svg
-                      className="animate-spin h-4 w-4"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="none"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
-                    제품 인식중...
-                  </div>
-                </div>
-              )}
-              <button
-                onClick={clearImage}
-                className="absolute top-2 right-2 bg-black/60 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs"
-              >
-                X
-              </button>
-              {identifiedInfo && (
-                <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-3 rounded-b-xl">
-                  <p className="text-white text-sm font-semibold">
-                    {identifiedInfo.productName}
-                  </p>
-                  <p className="text-white/70 text-xs">
-                    {identifiedInfo.category}
-                  </p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <label className="flex flex-col items-center justify-center h-28 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-orange hover:bg-orange-light/30 transition-colors">
-              <svg
-                className="w-8 h-8 text-gray-300 mb-1"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={1.5}
-                  d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z"
-                />
-              </svg>
-              <span className="text-xs text-gray-400">
-                사진으로 제품 자동 인식
-              </span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-            </label>
-          )}
-        </div>
-
-        {/* 구분선 */}
-        <div className="flex items-center gap-2 mb-3">
-          <div className="flex-1 h-px bg-gray-100" />
-          <span className="text-xs text-gray-300">또는 직접 입력</span>
-          <div className="flex-1 h-px bg-gray-100" />
-        </div>
 
         {/* 빠른 선택 칩 */}
         <div className="flex flex-wrap gap-1.5 mb-3">
           {QUICK_EXAMPLES.map((ex) => (
             <button
               key={ex.label}
-              onClick={() => {
-                setQuery(ex.query);
-                setIdentifiedInfo(null);
-              }}
+              onClick={() => setQuery(ex.query)}
               className={`px-2.5 py-1 rounded-full text-xs transition-colors ${
                 query === ex.query
                   ? "bg-orange text-white"
@@ -242,20 +137,40 @@ export default function SellerMode() {
           ))}
         </div>
 
-        {/* 제품명 입력 */}
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setIdentifiedInfo(null);
-          }}
-          onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-          placeholder="브랜드 + 제품명 + 모델명 (예: 다이슨 V15 디텍트)"
-          className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-orange focus:ring-1 focus:ring-orange mb-1"
-        />
+        {/* 제품명 입력 + 사진 보조 버튼 */}
+        <div className="flex gap-2 mb-1">
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+            placeholder="브랜드 + 제품명 + 모델명"
+            className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-orange focus:ring-1 focus:ring-orange"
+          />
+          <label className="px-3 py-3 rounded-xl border border-gray-200 text-gray-400 hover:border-orange hover:text-orange cursor-pointer transition-colors shrink-0 flex items-center">
+            {identifying ? (
+              <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" />
+              </svg>
+            )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              onChange={handleImageUpload}
+              className="hidden"
+            />
+          </label>
+        </div>
         <p className="text-xs text-gray-300 mb-3 ml-1">
-          구체적일수록 정확해요! 브랜드, 모델명, 세대/용량까지 입력해보세요
+          모델명 모르겠으면 오른쪽 카메라로 사진 찍어보세요
         </p>
 
         {/* 상태 선택 */}
@@ -284,25 +199,13 @@ export default function SellerMode() {
           {loading ? (
             <span className="flex items-center justify-center gap-1.5">
               <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  fill="none"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              조회중
+              적정가 조회 + 판매글 작성중...
             </span>
           ) : (
-            "적정가 조회"
+            "적정가 조회 + 판매글 작성"
           )}
         </button>
       </div>
@@ -332,6 +235,36 @@ export default function SellerMode() {
             <p className="text-xs font-semibold text-orange mb-1">산출 근거</p>
             <p className="text-sm text-gray-700">{result.reasoning}</p>
           </div>
+
+          {/* 판매글 미리보기 */}
+          {result.listing?.description && (
+            <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+              <div className="px-5 pt-4 pb-2 border-b border-gray-50">
+                <p className="text-xs text-gray-400 mb-1">자동 작성된 판매글</p>
+                <p className="font-semibold text-sm">{result.listing.title}</p>
+                <p className="text-lg font-bold text-orange mt-0.5">
+                  {result.suggested.toLocaleString()}원
+                </p>
+              </div>
+              <div className="px-5 py-4">
+                <p className="text-sm text-gray-600 whitespace-pre-line leading-relaxed">
+                  {result.listing.description}
+                </p>
+              </div>
+              <div className="px-5 pb-4">
+                <button
+                  onClick={handleCopyListing}
+                  className={`w-full py-3 rounded-xl text-sm font-semibold transition-colors ${
+                    copied
+                      ? "bg-green text-white"
+                      : "bg-orange text-white hover:bg-orange/90"
+                  }`}
+                >
+                  {copied ? "복사 완료! 당근에 붙여넣기 하세요" : "판매글 복사하기"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -344,8 +277,8 @@ export default function SellerMode() {
       {!result && !loading && !error && (
         <div className="mt-8 text-center text-gray-400 text-sm">
           <div className="text-4xl mb-3">💰</div>
-          <p>사진 찍으면 AI가 제품을 알아서 인식하고</p>
-          <p>적정 판매가를 알려드려요!</p>
+          <p>제품명과 상태를 입력하면</p>
+          <p>적정가 + 바로 올릴 수 있는 판매글을 만들어드려요!</p>
         </div>
       )}
     </div>

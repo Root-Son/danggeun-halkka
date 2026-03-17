@@ -35,10 +35,75 @@ async function searchNaver(query: string): Promise<NaverProduct[]> {
 
   const priceCompare = allItems.filter((i: { _productType: string }) => i._productType === "1");
   const normalSeller = allItems.filter((i: { _productType: string }) => i._productType === "2");
-
   const selected = priceCompare.length > 0 ? priceCompare : normalSeller.length > 0 ? normalSeller : allItems;
 
   return selected.map(({ _productType, ...rest }: { _productType: string; title: string; price: number; link: string; mall: string; image: string }) => rest);
+}
+
+async function generateListing(
+  query: string,
+  condition: string,
+  suggestedPrice: number,
+  newPriceLowest: number,
+  marketMedian: number
+): Promise<{ title: string; description: string }> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || suggestedPrice === 0) {
+    return { title: query, description: "" };
+  }
+
+  const priceInfo = [];
+  if (newPriceLowest > 0) priceInfo.push(`새제품 최저가 ${newPriceLowest.toLocaleString()}원`);
+  if (marketMedian > 0) priceInfo.push(`중고 시세 ${marketMedian.toLocaleString()}원`);
+
+  const prompt = `당근마켓에 올릴 판매글을 작성해줘. 실제 당근에서 잘 팔리는 글 스타일로.
+
+제품: ${query}
+상태: ${condition}
+판매가: ${suggestedPrice.toLocaleString()}원
+${priceInfo.length > 0 ? `참고: ${priceInfo.join(", ")}` : ""}
+
+[규칙]
+1. title: 당근마켓 제목 (40자 이내). 검색에 잘 걸리도록 브랜드+모델명+핵심스펙 포함. 예: "에어팟 프로 2세대 USB-C 풀박스"
+2. description: 본문 (5~8줄). 아래 구성으로:
+   - 제품 상태 간단히 (솔직하게)
+   - 구성품 (본체, 박스, 충전케이블 등)
+   - 새제품 가격 대비 얼마나 저렴한지 한 줄
+   - 거래 방법 (직거래 선호, 택배 가능 등)
+   - 해시태그 2~3개
+   자연스럽고 친근한 말투. 과장 없이. 이모지 1~2개만.
+
+JSON만 출력:
+{"title":"...","description":"..."}`;
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 8192, temperature: 0.7 },
+        }),
+      }
+    );
+
+    if (!res.ok) return { title: query, description: "" };
+
+    const data = await res.json();
+    const text = data.candidates?.[0]?.content?.parts?.find((p: { text?: string }) => p.text)?.text || "";
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return { title: query, description: "" };
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      title: parsed.title || query,
+      description: parsed.description || "",
+    };
+  } catch {
+    return { title: query, description: "" };
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -77,9 +142,29 @@ export async function POST(req: NextRequest) {
 
     const allUsedListings = [...daangnListings, ...bunjangListings];
 
-    const result = suggestSellingPrice(allNewItems, allUsedListings, condition);
+    const priceResult = suggestSellingPrice(allNewItems, allUsedListings, condition);
 
-    return NextResponse.json(result);
+    // 가격이 산출되면 판매글 생성
+    const newPriceLowest = allNewItems.length > 0 ? allNewItems[0].price : 0;
+    const soldPrices = allUsedListings
+      .filter((l) => l.status === "판매완료" && l.price > 0)
+      .map((l) => l.price);
+    const marketMedian = soldPrices.length > 0
+      ? soldPrices.sort((a, b) => a - b)[Math.floor(soldPrices.length / 2)]
+      : 0;
+
+    const listing = await generateListing(
+      query,
+      condition,
+      priceResult.suggested,
+      newPriceLowest,
+      marketMedian
+    );
+
+    return NextResponse.json({
+      ...priceResult,
+      listing,
+    });
   } catch (error) {
     console.error("Suggest price error:", error);
     return NextResponse.json(
