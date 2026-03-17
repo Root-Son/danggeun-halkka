@@ -6,7 +6,7 @@ import {
   searchDanawa,
 } from "@/lib/scraper";
 import { analyze } from "@/lib/analyzer";
-import { NaverProduct } from "@/lib/types";
+import { NaverProduct, DaangnProduct } from "@/lib/types";
 
 async function searchNaver(query: string): Promise<NaverProduct[]> {
   const clientId = process.env.NAVER_CLIENT_ID;
@@ -111,43 +111,82 @@ JSON만 출력:
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    // 공유 텍스트에서 URL 추출 ("이 글을 당근해보세요!\nhttps://..." 등)
-    const urlMatch = (body.url || "").match(/https?:\/\/[^\s"'<>]+/i);
-    const url = urlMatch ? urlMatch[0] : (body.url || "").trim();
 
-    if (!url || !url.startsWith("http")) {
+    // 모드 판별: url이 있으면 링크 모드, query가 있으면 검색 모드
+    const hasUrl = !!(body.url || "").match(/https?:\/\//i);
+    const hasQuery = !!(body.query || "").trim();
+
+    if (!hasUrl && !hasQuery) {
       return NextResponse.json(
-        { error: "올바른 중고거래 링크를 입력해주세요." },
+        { error: "링크 또는 제품명을 입력해주세요." },
         { status: 400 }
       );
     }
 
-    // 1. 상품 페이지 크롤링 (당근, 번개장터, 중고나라 등 어디든)
-    const product = await scrapeProduct(url);
+    let product: DaangnProduct;
+    let searchQuery: string;
+    let newProductQuery: string;
+    let myUrl = "";
 
-    if (!product.title) {
-      return NextResponse.json(
-        { error: "상품 정보를 가져올 수 없습니다." },
-        { status: 400 }
+    if (hasUrl) {
+      // === 링크 모드 ===
+      const urlMatch = (body.url || "").match(/https?:\/\/[^\s"'<>]+/i);
+      const url = urlMatch ? urlMatch[0] : (body.url || "").trim();
+      myUrl = url.replace(/\/+$/, "").toLowerCase();
+
+      product = await scrapeProduct(url);
+
+      if (!product.title) {
+        return NextResponse.json(
+          { error: "상품 정보를 가져올 수 없습니다." },
+          { status: 400 }
+        );
+      }
+
+      const productInfo = await extractProductInfo(
+        product.title,
+        product.description
       );
+      searchQuery = productInfo.usedSearchKeyword;
+      newProductQuery = productInfo.newProductKeyword;
+      if (productInfo.condition) {
+        product = { ...product, category: productInfo.condition };
+      }
+    } else {
+      // === 검색 모드 ===
+      const query = (body.query || "").trim();
+      const price = parseInt(body.price) || 0;
+      const condition = body.condition || "";
+
+      product = {
+        title: query,
+        price,
+        description: condition ? `상태: ${condition}` : "",
+        category: condition,
+        status: "판매중",
+        location: "",
+        images: [],
+        chatCount: 0,
+        likeCount: 0,
+        viewCount: 0,
+        sellerName: "",
+        sellerTemperature: 0,
+      };
+
+      searchQuery = query;
+      newProductQuery = query;
     }
 
-    // 2. Gemini로 본문 분석 → 새제품/중고 각각 최적 키워드 + 상태 추출
-    const productInfo = await extractProductInfo(
-      product.title,
-      product.description
-    );
-
-    // 3. 새제품은 정식 제품명으로, 중고는 자연스러운 키워드로 검색
+    // 모든 소스 동시 조회
     const [naverItems, danawaItems, daangnListings, bunjangListings] =
       await Promise.all([
-        searchNaver(productInfo.newProductKeyword),
-        searchDanawa(productInfo.newProductKeyword),
-        searchDaangn(productInfo.usedSearchKeyword),
-        searchBunjang(productInfo.usedSearchKeyword),
+        searchNaver(newProductQuery),
+        searchDanawa(newProductQuery),
+        searchDaangn(searchQuery),
+        searchBunjang(searchQuery),
       ]);
 
-    // 4. 새제품 가격 합치기 (요금제/통신사 번들만 제거 + 중복 제거)
+    // 새제품 가격 합치기 (요금제/통신사 번들만 제거 + 중복 제거)
     const junkTitleWords = /요금제|할부|약정|통신사|SKT|KT|LGU|유플러스|알뜰폰|사은품|공시지원/i;
     const allNewItems = [...naverItems, ...danawaItems]
       .filter((item) => item.price >= 1000)
@@ -162,22 +201,18 @@ export async function POST(req: NextRequest) {
       return true;
     });
 
-    // 5. 중고 매물 합치기 (당근 + 번개장터) — 본인 글 제외
-    const normalizeUrl = (u: string) => u.replace(/\/+$/, "").toLowerCase();
-    const myUrl = normalizeUrl(url);
+    // 중고 매물 합치기 — 본인 글 제외 (링크 모드만)
     const allUsedListings = [...daangnListings, ...bunjangListings].filter(
-      (l) => normalizeUrl(l.url) !== myUrl
+      (l) => !myUrl || l.url.replace(/\/+$/, "").toLowerCase() !== myUrl
     );
 
-    // 6. 분석 (Gemini가 파악한 상태 정보도 전달)
+    // 분석
     const result = analyze(product, deduped, allUsedListings);
 
-    // Gemini 분석 결과 추가
     return NextResponse.json({
       ...result,
-      searchKeyword: productInfo.usedSearchKeyword,
-      newProductKeyword: productInfo.newProductKeyword,
-      detectedCondition: productInfo.condition,
+      searchKeyword: searchQuery,
+      newProductKeyword: newProductQuery,
     });
   } catch (error) {
     console.error("Analysis error:", error);
