@@ -19,8 +19,8 @@ function assessMarketConfidence(
   usedListings: UsedListing[],
   soldCount: number
 ): Confidence {
-  if (soldCount >= 5) return "high";
-  if (soldCount >= 2 || usedListings.length >= 5) return "medium";
+  if (soldCount >= 10) return "high";
+  if (soldCount >= 3 || usedListings.length >= 8) return "medium";
   return "low";
 }
 

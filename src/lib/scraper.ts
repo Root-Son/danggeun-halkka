@@ -114,20 +114,7 @@ async function fetchDaangnSearch(query: string): Promise<{ title: string; price:
 }
 
 export async function searchDaangn(query: string): Promise<UsedListing[]> {
-  // 결과 없으면 키워드를 줄여가며 재시도
-  let articles = await fetchDaangnSearch(query);
-
-  if (articles.length === 0) {
-    const tokens = query.split(/\s+/);
-    // 토큰이 3개 이상이면 앞 2개로 재시도
-    if (tokens.length >= 3) {
-      articles = await fetchDaangnSearch(tokens.slice(0, 2).join(" "));
-    }
-    // 그래도 없으면 첫 단어만
-    if (articles.length === 0 && tokens.length >= 2) {
-      articles = await fetchDaangnSearch(tokens[0]);
-    }
-  }
+  const articles = await fetchDaangnSearch(query);
 
   try {
 
